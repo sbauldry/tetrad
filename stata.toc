@@ -1,0 +1,7 @@
+********************************************** begin stata.toc
+v 1.6
+d Shawn Bauldry, University of Alabama at Birmingham
+d 
+p tetrad A command for Confirmatory Tetrad Analysis.
+end stata.toc
+********************************************** end stata.toc
