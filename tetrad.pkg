@@ -2,4 +2,6 @@ v 3
 d tetrad. Package to conduct CTA.
 d Program by Shawn Bauldry.
 f tetrad.ado
+f tetrad_bootstrap.ado
 f tetrad.sthlp
+f tetrad_bootstrap.sthlp
