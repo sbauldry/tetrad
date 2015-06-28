@@ -5,3 +5,5 @@ f tetrad.ado
 f tetrad_bootstrap.ado
 f tetrad.sthlp
 f tetrad_bootstrap.sthlp
+f tetrad_matrix.ado
+f tetrad_matrix.sthlp
