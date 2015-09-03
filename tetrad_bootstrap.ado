@@ -123,6 +123,7 @@ end
 1.4  06.01.15  update to correspond with tetrad v1.4.0
 1.5  06.01.15  update handling of errors
 1.6  06.02.15  fixed bug in bootstrap program
+1.7  09.03.15  set default bootstrap replications to 1000
 */
 
 
