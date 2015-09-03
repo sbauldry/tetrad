@@ -6,7 +6,7 @@ program define tetrad_bootstrap, rclass
 	syntax varlist(min = 4 numeric) [if] [in], ///
 		   icm1(name)         /// implied covariance matrix 1
 		   [seed(string)      /// random number seed
-		   reps(integer 100)] /// number of bootstrap replications
+		   reps(integer 1000)] /// number of bootstrap replications
 
 	marksample touse
 	
