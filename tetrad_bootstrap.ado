@@ -43,9 +43,8 @@ program define tetrad_bootstrap, rclass
 	mata: _transform("`ICM1'", "`varlist'")
 	
 	*** bootstrap tetrad test on transformed data and store results
-	tempfile bs
-	postutil clear
-	postfile bs rep T Ts using `bs'
+	tempfile _tetrad_bootstrap
+	postfile bs rep T Ts using `_tetrad_bootstrap'
 	
 	forval i = 1/`reps' {
 		_CTABoot `varlist', icm1(`icm1')
@@ -54,7 +53,7 @@ program define tetrad_bootstrap, rclass
 	
 	postclose bs
 	
-	qui use `bs', clear
+	qui use `_tetrad_bootstrap', clear
 	qui gen pv = (Ts > T)
 	qui sum pv
 	local pv = r(mean)
@@ -124,6 +123,7 @@ end
 1.5  06.01.15  update handling of errors
 1.6  06.02.15  fixed bug in bootstrap program
 1.7  09.03.15  set default bootstrap replications to 1000
+1.8  02.18.16  removed postutil clear
 */
 
 
