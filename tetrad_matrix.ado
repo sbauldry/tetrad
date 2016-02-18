@@ -1,4 +1,4 @@
-*! v1.6, CTA matrix program, S Bauldry, 27jun2015
+*! v1.7, CTA matrix program, S Bauldry, 06jan2016
 
 capture program drop tetrad_matrix
 program define tetrad_matrix, rclass
@@ -7,6 +7,7 @@ program define tetrad_matrix, rclass
 	         scm(name)        /// sample covariance matrix
 		     icm1(name)       /// implied covariance matrix 1
 	         [icm2(name)      /// implied covariance matrix 2
+			 pcacm(name)      /// asymptotic covariance matrix for polychoric scm
 		     reps(integer 1)  /// number of replications
 		     seed(string)     /// random number seed
 		     tlist(integer 0) /// request for list of vanishing tetrads
@@ -26,7 +27,16 @@ program define tetrad_matrix, rclass
 		local Nest = 1
 	}
 	
-	*** verify that ICMs contain same variables as varlist
+	*** checking for PCACM, if none setting PCACM to SCM for ease of programming
+	if ("`pcacm'" == "") {
+		local Cat = 0
+		local pcacm = "`scm'"
+	}
+	else if ("`pcacm'" != "") {
+		local Cat = 1
+	}
+	
+	*** verify that ICMs contain same variables as SCM
 	local icm1list1 : colfullnames `icm1'
 	local icm1list1 : subinstr local icm1list1 "observed:" "", all
 	foreach v1 of local icm1list1 {
@@ -76,7 +86,7 @@ program define tetrad_matrix, rclass
 	}
 	
 	*** running Mata function for CTA
-	mata: _CTA(`obs', "`scm'", "`ICM1'", "`ICM2'", `Nest', `reps', `boot')
+	mata: _CTA(`obs', "`scm'", "`ICM1'", "`ICM2'", `Nest', `reps', `boot', "`pcacm'", `Cat')
 	
 	*** displaying results for non-nested test
 	if (`Nest' != 1 & `boot' != 1) {
@@ -203,19 +213,21 @@ end
 cap mata: mata drop _CTA() _IdVT() _IdNRVT() _TestStatistic() ///
                     _BSTestStatistic() _ListTetrad() _TransformICM() ///
 					_Tetrads() _TetVar() _checkVT() _UniqueCov() _GrdMat() ///
-					_NTAsympCov() _sweep() _sweep_all() 
+					_NTAsympCov() _PCAsympCov() _sweep() _sweep_all() 
 
 
 *** CTA Main Mata function
 mata:
 
 void _CTA( real scalar N, string m1, string m2, string m3, ///
-           real scalar Nest, real scalar reps, real scalar boot ) {
+           real scalar Nest, real scalar reps, real scalar boot, ///
+		   string m4, real scalar Cat ) {
 
 	// Read Stata matrices
-	_SCM  = st_matrix(m1)
-	_ICM1 = st_matrix(m2)
-	_ICM2 = st_matrix(m3)
+	_SCM   = st_matrix(m1)
+	_ICM1  = st_matrix(m2)
+	_ICM2  = st_matrix(m3)
+	_PCACM = st_matrix(m4)
 
 	// Transform ICMs for identifying vanishing and nonredudant tetrads
 	_ICM1t = _TransformICM( _ICM1 )
@@ -245,8 +257,8 @@ void _CTA( real scalar N, string m1, string m2, string m3, ///
 			_ICM2NRVT = _IdNRVT(_ICM2VTr, _ICM2t)
 	
 			// Step 4A: Calculate test statistics
-			_CTAResults[r,1..3] = _TestStatistic( _ICM1NRVT, _SCM, N )
-			_CTAResults[r,4..6] = _TestStatistic( _ICM2NRVT, _SCM, N )
+			_CTAResults[r,1..3] = _TestStatistic( _ICM1NRVT, _SCM, N, _PCACM, Cat )
+			_CTAResults[r,4..6] = _TestStatistic( _ICM2NRVT, _SCM, N, _PCACM, Cat )
 		
 				// test statistics for nested test
 				_CTAResults[r,7] = _CTAResults[r,1] - _CTAResults[r,4]
@@ -259,7 +271,7 @@ void _CTA( real scalar N, string m1, string m2, string m3, ///
 		
 		// Step 4B: calculate test statistic
 		_CTAResults = J(1, 9, .)
-		_CTAResults[1,1..3] = _BSTestStatistic( _ICM1VT, _SCM, N )
+		_CTAResults[1,1..3] = _BSTestStatistic( _ICM1VT, _SCM, N, _PCACM, Cat )
 		
 	}
 	
@@ -328,7 +340,7 @@ real matrix _IdNRVT( real matrix vt, real matrix icm ) {
 
 		// calculate asymptotic covariance matrix for unique covariances
 		acm = _NTAsympCov( uc, icm )
-
+			
 		// calculate asymptotic covariance matrix for ICM vanishing tetrads
 		avt = dvt'acm*dvt
 
@@ -349,7 +361,8 @@ real matrix _IdNRVT( real matrix vt, real matrix icm ) {
 
 
 // Step 4A: Calculate test statistic
-real vector _TestStatistic( real matrix nrvt, real matrix scm, real scalar N) {
+real vector _TestStatistic( real matrix nrvt, real matrix scm, real scalar N, ///
+                            real matrix pcacm, real scalar Cat) {
 	
 	// find unique covariances among nonredundant vanishing tetrads
 	lnrvt = _UniqueCov(nrvt)
@@ -359,8 +372,13 @@ real vector _TestStatistic( real matrix nrvt, real matrix scm, real scalar N) {
 	dvt = _GrdMat( uc, lnrvt, nrvt, scm )
 	
 	// calculate asymptotic covariance matrix for unique covariances
-	acm = _NTAsympCov( uc, scm )
-	
+	if (Cat == 0) {
+		acm = _NTAsympCov( uc, scm )
+	}
+	else if (Cat == 1) {
+		acm = _PCAsympCov( uc, scm, pcacm )
+	}
+		
 	// calculate asymptotic covariance matrix for SCM nonredundant VTs
 	avt = dvt'*acm*dvt
 	
@@ -376,7 +394,8 @@ real vector _TestStatistic( real matrix nrvt, real matrix scm, real scalar N) {
 
 
 // Step 4B: Calculate test statistic if bootstrapping
-real vector _BSTestStatistic( real matrix vt, real matrix scm, real scalar N) {
+real vector _BSTestStatistic( real matrix vt, real matrix scm, real scalar N, ///
+                              real matrix pcacm, real scalar Cat) {
 	
 	// find unique covariances among vanishing tetrads
 	lvt = _UniqueCov(vt)
@@ -385,8 +404,13 @@ real vector _BSTestStatistic( real matrix vt, real matrix scm, real scalar N) {
 	// calculate gradient matrix
 	dvt = _GrdMat( uc, lvt, vt, scm )
 	
-	// calculate asymptotic covariance matrix for unique covariances
-	acm = _NTAsympCov( uc, scm )
+	// asymptotic covariance matrix for unique covariances
+	if (Cat == 0) {
+		acm = _NTAsympCov( uc, scm )
+	}
+	else if (Cat == 1) {
+		acm = _PCAsympCov( uc, scm, pcacm )
+	}
 	
 	// calculate asymptotic covariance matrix for SCM nonredundant VTs
 	avt = dvt'*acm*dvt
@@ -403,6 +427,7 @@ real vector _BSTestStatistic( real matrix vt, real matrix scm, real scalar N) {
 	
 	return(ts)
 }
+
 
 
 
@@ -589,7 +614,7 @@ real matrix _GrdMat( string vector v1, string matrix m1, ///
 
 
 
-// calculate normal theory asymptotic covariance matrix for unique covariances
+// normal theory asymptotic covariance matrix for unique covariances
 real matrix _NTAsympCov(string vector v1, real matrix m1) {
 
 	real matrix m2
@@ -620,6 +645,68 @@ real matrix _NTAsympCov(string vector v1, real matrix m1) {
 
 	return(m2)
 }
+
+
+
+// polychoric asymptotic covariance matrix for unique covariances
+real matrix _PCAsympCov(string vector v1, real matrix m1, real matrix m2) {
+	
+	real matrix m3
+	m3 = J(cols(v1), cols(v1), 0)
+		
+	// labels for polychoric asymptotic covariance matrix
+	nv = rows(m1)
+	np = nv*(nv - 1)/2
+	pcacmlabel = J(1, np, "aaaa")
+	k = 1
+	for (i = 1; i <= nv; i++) {
+		for (j = i; j <= nv; j++) {
+			if (j != i & i < 10 & j < 10) {
+				pcacmlabel[1,k] = "0" + strofreal(j) + "0" + strofreal(i)
+				k++
+			}
+			else if (j != i & i >= 10 & j < 10) {
+				pcacmlabel[1,k] = "0" + strofreal(j) + strofreal(i)
+				k++
+			}
+			else if (j != i & i < 10 & j >= 10) {
+				pcacmlabel[1,k] = strofreal(j) + "0" + strofreal(i)
+				k++
+			}
+			else if (j != i & i >= 10 & j >= 10) {
+				pcacmlabel[1,k] = strofreal(j) + strofreal(i)
+				k++
+			}
+		}
+	}
+	
+	// constructing asymptotic covariance matrix for unique covariances
+	for (i = 1; i <= cols(v1); i++) {
+		for (j = 1; j <= cols(v1); j++) {
+			e = substr( v1[1,i], 1, 2 ) + substr( v1[1,i], 3, 2 )
+			f = substr( v1[1,i], 3, 2 ) + substr( v1[1,i], 1, 2 )
+			g = substr( v1[1,j], 1, 2 ) + substr( v1[1,j], 3, 2 )
+			h = substr( v1[1,j], 3, 2 ) + substr( v1[1,j], 1, 2 )
+		
+			for (k = 1; k<= cols(pcacmlabel); k++) {
+				if (pcacmlabel[1,k] == e | pcacmlabel[1,k] == f) {
+					m = k
+				}
+				if (pcacmlabel[1,k] == g | pcacmlabel[1,k] == h) {
+					n = k
+				}
+			}
+			
+			m3[i,j] = m2[m,n]
+		}
+	} 
+	
+	return(m3)
+
+}
+	
+
+
 
 
 
@@ -691,6 +778,7 @@ end
 
 /* History
 1.6  06.27.15  initial version matching tetrad 1.6
+1.7  02.15.16  added option to input asymptotic covariance matrix
 */
 
 
