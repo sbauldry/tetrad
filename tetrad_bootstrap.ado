@@ -116,6 +116,9 @@ program define tetrad_bootstrap, rclass
 		dis as res %8.4f `T' "    " as res %3.0f `df' "    " as res %8.4f `pv'
 		dis as text "{hline 30}"
 	}
+	
+	*** return bootstrap p-value
+	return scalar _bsp = `pv'
 		
 	*** restore data
 	qui use `pres', clear
