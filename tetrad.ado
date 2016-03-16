@@ -1,6 +1,5 @@
-*! v1.6, CTA program, S Bauldry, 02jun2015
+*! v1.7, CTA program, S Bauldry, 14mar2016
 
-capture program drop tetrad
 program define tetrad, rclass
 	version 13
 	syntax varlist(min = 4 numeric) [if] [in], ///
@@ -252,10 +251,10 @@ void _CTA( real scalar N, string m1, string m2, string m3, ///
 			_CTAResults[r,1..3] = _TestStatistic( _ICM1NRVT, _SCM, N )
 			_CTAResults[r,4..6] = _TestStatistic( _ICM2NRVT, _SCM, N )
 		
-				// test statistics for nested test
-				_CTAResults[r,7] = _CTAResults[r,1] - _CTAResults[r,4]
-				_CTAResults[r,8] = _CTAResults[r,2] - _CTAResults[r,5]
-				_CTAResults[r,9] = chi2tail( _CTAResults[r,8], _CTAResults[r,7])
+			// test statistics for nested test
+			_CTAResults[r,7] = _CTAResults[r,1] - _CTAResults[r,4]
+			_CTAResults[r,8] = _CTAResults[r,2] - _CTAResults[r,5]
+			_CTAResults[r,9] = chi2tail( _CTAResults[r,8], _CTAResults[r,7])
 		}
 	}
 
@@ -264,6 +263,12 @@ void _CTA( real scalar N, string m1, string m2, string m3, ///
 		// Step 4B: calculate test statistic
 		_CTAResults = J(1, 9, .)
 		_CTAResults[1,1..3] = _BSTestStatistic( _ICM1VT, _SCM, N )
+		_CTAResults[1,4..6] = _BSTestStatistic( _ICM2VT, _SCM, N )
+		
+		// test statistics for nested test
+		_CTAResults[1,7] = _CTAResults[1,1] - _CTAResults[1,4]
+		_CTAResults[1,8] = _CTAResults[1,2] - _CTAResults[1,5]
+		_CTAResults[1,9] = chi2tail( _CTAResults[1,8], _CTAResults[1,7])
 		
 	}
 	
@@ -701,14 +706,5 @@ end
 1.4  06.01.15  added test to ensure same variables in ICMs and SCM
 1.5  06.01.15  updated handling of errors to accomodate bootstrapping
 1.6  06.02.15  fixed bug in bootstrap program
+1.7  03.14.16  updated to accomodate nested test for bootstrapping
 */
-
-
-
-
-
-
-	
-
-
-

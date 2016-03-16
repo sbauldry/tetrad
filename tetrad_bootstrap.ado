@@ -1,19 +1,34 @@
-*! v1.5, CTA program, S Bauldry, 01jun2015
+*! v1.9, CTA program, S Bauldry, 14mar2016
 
-capture program drop tetrad_bootstrap
 program define tetrad_bootstrap, rclass
 	version 13
 	syntax varlist(min = 4 numeric) [if] [in], ///
-		   icm1(name)         /// implied covariance matrix 1
-		   [seed(string)      /// random number seed
+		   icm1(name)          /// implied covariance matrix 1
+		   [icm2(name)         /// implied covariance matrix 2
+		   seed(string)        /// random number seed
 		   reps(integer 1000)] /// number of bootstrap replications
 
 	marksample touse
+	if ("`seed'" != "") {
+		set seed `seed'
+	}
 	
-	*** run tetrad on original data to obtain baseline test statistic
-	tetrad `varlist' if `touse', icm1(`icm1') boot(1)
-	local T = r(T)
-	local df = r(df)
+	*** run tetrad on original data to obtain baseline test statistics
+	if ("`icm2'" == "") {
+		local Nest = 0
+		local icm2 = "`icm1'"
+		tetrad `varlist' if `touse', icm1(`icm1') seed(`seed') boot(1)
+		mat tb   = r(_CTAResults)
+		local T  = tb[1,1]
+		local df = tb[1,2]
+	}
+	else if ("`icm2'" != "") {
+		local Nest = 1
+		tetrad `varlist' if `touse', icm1(`icm1') icm2(`icm2') seed(`seed') boot(1)
+		mat tb   = r(_CTAResults)
+		local T  = tb[1,7]
+		local df = tb[1,8]
+	}
 	
 	*** save data before transforming
 	preserve
@@ -25,63 +40,109 @@ program define tetrad_bootstrap, rclass
 	
 	recast double _all 
 	
-	*** put observed variables from ICs in same order as SCM
-	tempname ICM1
+	*** put observed variables from ICM in same order as SCM
+	tempname ICM1 ICM2
 	local k : list sizeof varlist
 	mat `ICM1' = J(`k', `k', .)
+	mat `ICM2' = J(`k', `k', .)
 	foreach row of local varlist {
 		foreach col of local varlist {
 			local i : list posof "`row'" in varlist
 			local j : list posof "`col'" in varlist
 			local n = rownumb(`icm1', "`row'")
 			local m = colnumb(`icm1', "`col'")
+			local o = rownumb(`icm2', "`row'")
+			local p = colnumb(`icm2', "`col'")
 			mat `ICM1'[`i',`j'] = `icm1'[`n',`m']
+			mat `ICM2'[`i',`j'] = `icm2'[`o',`p']
 		}
 	}
 	
-	*** transform data to be consistent with null hypothesis
+	*** transform data to be consistent with null hypothesis for most restrictive model
 	mata: _transform("`ICM1'", "`varlist'")
 	
 	*** bootstrap tetrad test on transformed data and store results
-	tempfile _tetrad_bootstrap
-	postfile bs rep T Ts using `_tetrad_bootstrap'
+	if (`Nest' == 0) {
+		tempfile _tetrad_bootstrap
+		postfile bs rep T Ts using `_tetrad_bootstrap'
 	
-	forval i = 1/`reps' {
-		_CTABoot `varlist', icm1(`icm1')
-		post bs (`i') (`T') (r(Ts))
+		forval i = 1/`reps' {
+			_CTABoot `varlist', icm1(`icm1')
+			post bs (`i') (`T') (r(Ts))
+		}
+	
+		postclose bs
+	
+		qui use `_tetrad_bootstrap', clear
+		qui gen pv = (Ts > T)
+		qui sum pv
+		local pv = r(mean)
+	
+		*** display and return results
+		dis as text ""
+		dis as text "Confirmatory Tetrad Analysis Results"
+		dis as text ""
+		dis as text "                     bootstrap"
+		dis as text "Chi-sq       df      p-value"
+		dis as text "{hline 30}"
+		dis as res %8.4f `T' "    " as res %3.0f `df' "    " as res %8.4f `pv'
+		dis as text "{hline 30}"
 	}
 	
-	postclose bs
+		*** bootstrap tetrad test on transformed data and store results
+	if (`Nest' == 1) {
+		tempfile _tetrad_bootstrap
+		postfile bs rep T Ts using `_tetrad_bootstrap'
 	
-	qui use `_tetrad_bootstrap', clear
-	qui gen pv = (Ts > T)
-	qui sum pv
-	local pv = r(mean)
+		forval i = 1/`reps' {
+			_CTANestBoot `varlist', icm1(`icm1') icm2(`icm2')
+			post bs (`i') (`T') (r(Ts))
+		}
 	
-	*** display and return results
-	dis as text ""
-	dis as text "Confirmatory Tetrad Analysis Results"
-	dis as text ""
-	dis as text "                     bootstrap"
-	dis as text "Chi-sq       df      p-value"
-	dis as text "{hline 30}"
-	dis as res %8.4f `T' "    " as res %3.0f `df' "    " as res %8.4f `pv'
-	dis as text "{hline 30}"
-
+		postclose bs
+	
+		qui use `_tetrad_bootstrap', clear
+		qui gen pv = (Ts > T)
+		qui sum pv
+		local pv = r(mean)
+	
+		*** display and return results
+		dis as text ""
+		dis as text "Nested Confirmatory Tetrad Analysis Results"
+		dis as text ""
+		dis as text "M1 - M2              bootstrap"
+		dis as text "Chi-sq       df      p-value"
+		dis as text "{hline 30}"
+		dis as res %8.4f `T' "    " as res %3.0f `df' "    " as res %8.4f `pv'
+		dis as text "{hline 30}"
+	}
+		
 	*** restore data
 	qui use `pres', clear
 end
 
 
 
-*** Bootstrap program
-capture program drop _CTABoot
+*** Bootstrap programs
 program _CTABoot, rclass
 	syntax varlist(min = 4 numeric), icm1(name) 
 	preserve
 	bsample
 	tetrad `varlist', icm1(`icm1') boot(1)
-	return scalar Ts = r(T)
+	mat tb    = r(_CTAResults)
+	local Ts  = tb[1,1]
+	return scalar Ts = `Ts'
+	restore
+end
+
+program _CTANestBoot, rclass
+	syntax varlist(min = 4 numeric), icm1(name) icm2(name)
+	preserve
+	bsample
+	tetrad `varlist', icm1(`icm1') icm2(`icm2') boot(1)
+	mat tb    = r(_CTAResults)
+	local Ts  = tb[1,7]
+	return scalar Ts = `Ts'
 	restore
 end
 
@@ -124,14 +185,5 @@ end
 1.6  06.02.15  fixed bug in bootstrap program
 1.7  09.03.15  set default bootstrap replications to 1000
 1.8  02.18.16  removed postutil clear
+1.9  03.14.16  updated to allow for nested tests
 */
-
-
-
-
-
-
-	
-
-
-
