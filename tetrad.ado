@@ -1,6 +1,6 @@
-*! v1.7, CTA program, S Bauldry, 14mar2016
+*! v1.8, CTA program, S Bauldry, 28sep2021
 
-program define tetrad, rclass
+program define tetrad_test, rclass
 	version 13
 	syntax varlist(min = 4 numeric) [if] [in], ///
 		   icm1(name)       /// implied covariance matrix 1
@@ -26,9 +26,9 @@ program define tetrad, rclass
 	
 	*** verify that ICMs contain same variables as varlist
 	local icm1list1 : colfullnames `icm1'
-	local icm1list1 : subinstr local icm1list1 "observed:" "", all
+	local icm1list1 : subinstr local icm1list1 "Observed:" "", all
 	foreach v1 of local icm1list1 {
-		if regexm( "`v1'", "^latent:") {
+		if regexm( "`v1'", "^Latent:") {
 			local icm1list "`icm1list'"
 		}
 		else {
@@ -37,9 +37,9 @@ program define tetrad, rclass
 	}
 	
 	local icm2list1 : colfullnames `icm2'
-	local icm2list1 : subinstr local icm2list1 "observed:" "", all
+	local icm2list1 : subinstr local icm2list1 "Observed:" "", all
 	foreach v2 of local icm2list1 {
-		if regexm( "`v2'", "^latent:") {
+		if regexm( "`v2'", "^Latent:") {
 			local icm2list "`icm2list'"
 		}
 		else {
@@ -704,7 +704,8 @@ end
 1.2  05.26.15  added option to output list of tetrads
 1.3  05.25.15  developed bootstrap component
 1.4  06.01.15  added test to ensure same variables in ICMs and SCM
-1.5  06.01.15  updated handling of errors to accomodate bootstrapping
+1.5  06.01.15  updated handling of errors to accommodate bootstrapping
 1.6  06.02.15  fixed bug in bootstrap program
-1.7  03.14.16  updated to accomodate nested test for bootstrapping
+1.7  03.14.16  updated to accommodate nested test for bootstrapping
+1.8  09.28.21  updated names of Sigma to reflect change in State 17
 */
