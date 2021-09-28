@@ -1,7 +1,7 @@
 *! v1.8, CTA program, S Bauldry, 28sep2021
 
-program define tetrad_test, rclass
-	version 13
+program define tetrad, rclass
+	version 17
 	syntax varlist(min = 4 numeric) [if] [in], ///
 		   icm1(name)       /// implied covariance matrix 1
 	       [icm2(name)      /// implied covariance matrix 2
